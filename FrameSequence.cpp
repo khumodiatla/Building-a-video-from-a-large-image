@@ -1,0 +1,429 @@
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <ctype.h>
+#include <vector>
+#include "FrameSequence.h"
+
+#include <iostream>
+
+/** Implementation of the deafult FrameSequence constructor
+  * that sets up class variables
+*/
+MTLKHU004::FrameSequence::FrameSequence(){
+	binaryData = nullptr;
+	height = width = intensity = 0;
+	frameArray = nullptr;
+	frameWidth = frameHeight = 0;
+}
+
+/** Implementation of the destructor ~FrameSequence 
+  * that free up the heap memory
+*/
+MTLKHU004::FrameSequence::~FrameSequence(){
+	if( frameArray != nullptr){
+		for(int i=0; i < frameWidth; ++i){      
+               		delete [] frameArray[i];
+	        }
+        	delete [] frameArray;
+	}
+}
+
+/** Implementation of the readImage function
+  * that read an input image and store it in an array on the heap
+*/
+void MTLKHU004::FrameSequence::readImage( std::string imageName){
+	std::ifstream in(imageName, std::ios::binary); // Read from image in binary
+	std::string line;
+
+	if( in.is_open()){ // If file is open 
+		while( getline(in, line)){
+			if( isdigit(line[0]) ){ // If first character in a line is a digit
+				
+				std::istringstream inputStream(line);
+				// Extract width and height and intensity of the image
+				inputStream >> width; 
+				inputStream >> height;
+				in >> intensity ;
+				
+				binaryData = new char[width*height];
+
+				in.read( binaryData, (width*height));				
+
+				break;
+			}
+		}
+	}
+	else{ // If error occured and file not open
+		std::cout << "Couldn't open Image! " << "\n";	
+		exit(0);  // Terminate program
+	}
+
+	in.close(); // Close the image
+}
+
+/** Implementation of the extractFrame function
+  * that extract a single image frame from the input image  
+*/
+void  MTLKHU004::FrameSequence::extractFrame(int x1, int y1, int frameWidth, int frameHeight){
+	// Heap memory for frame Images
+        frameArray = new unsigned char *[frameWidth];
+        for(int i=0; i < frameWidth; ++i){      
+        	frameArray[i] = new unsigned char[ frameHeight ];
+	}
+	
+	// Extract the frame image starting from x1,y1 for frame size(frameWidth * frameHeight)
+	int q = x1;
+	for(int k=0; k< y1; ++k){
+		q += (width);
+	}
+	
+	for(int i=0; i<frameWidth; ++i){
+		for(int j=0; j< frameHeight; ++j){
+			if( q < (width * height)){ // If image frame is still within the input image	
+				frameArray[i][j] =  (unsigned char) binaryData[q];
+				++q;
+			}
+			else{ // If image frame is out of the input image size
+				frameArray[i][j] = (unsigned char) 255;
+			}
+		}
+		q += (width -frameWidth);
+	}
+
+	// Add frameArray with data for the frame image to the image
+	imageSequence.push_back(frameArray);
+	
+}
+
+/** Implentation of the extractFrames function 
+  * that extracts multiple frames from start to end 
+  * by invoking extractFrame with varies arguments
+*/
+void MTLKHU004::FrameSequence::extractFrames(int x1, int y1, int x2, int y2, int frameWidth, int frameHeight){	
+	
+	frameWidth = frameWidth; frameHeight = frameHeight;
+	if( x1 >= 0 && x1 <= width && y1 >= 0 && y1 <= height ){ // check if x1 and y1 are valid coordinates
+
+		if( x2 >= 0 && x2 <= width && y2 >=0 && y2 <= height){ // check if x2 and y2 are valid coordinates
+
+			if( frameWidth > 0 && frameHeight > 0){ // Check if frameSize is valid( height and width > 0)
+
+				// Choose the start and end of extraction
+				int start, end;
+				if( x1 <= y1 && x2 >= y2 ){
+					start = x1; end = x2;
+				}
+				if( x1 <= y1 && x2 < y2 ){
+                                        start = x1; end = y2;
+                                }
+  				if( y1 <= x1 && x2 >= y2 ){
+                                        start = y1; end = x2;
+                                }
+				if( y1 <= x1 && x2 < y2 ){
+                                        start = y1; end = y2;
+                                }
+				if( x1 > y1 && x2 >= y2 ){
+                                        start = y1; end = x2;
+                                }
+				if( x1 > y1 && x2 < y2 ){
+                                        start = y1; end = y2;
+                                }
+			        if( y1 > x1 && x2 >= y2 ){
+                                        start = x1; end = x2;
+                                }
+			        if( y1 > x1 && x2 < y2 ){
+                                        start = x1; end = y2;
+                                }
+
+			
+				if( start <= end){ // If count  less than or equal end
+					/** Loop from start coordinates to end coordinates
+				  	* Moving the frame Image 1 pixel to the right and
+				  	* 1 pixel downward
+					*/				
+				
+					int x1_copy = x1, y1_copy = y1;
+					extractFrame(x1,y1,frameWidth, frameHeight);
+	
+					for(int count = start; count < end ; ++count){
+						if( x1_copy < x2){ ++x1_copy; }  // Move Image 1 pixel to right
+						if( x1_copy > x2){ --x1_copy; }  // Move Image 1 pixel to left
+						if( y1_copy < y2){ ++y1_copy; }  // Move Image 1 pixel downward
+						if( y1_copy > y2){ --y1_copy; }  // Move Image 1 pixel upward
+
+						if( x1_copy < x2 || y1_copy < y2){
+							// Invoke the extractFrame function
+							extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+						}
+						if( x1_copy == x2 && y1_copy == y2){
+							// Invoke the extractFrame function
+							extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+							break;
+						}
+					}
+				}
+				if( start >= end){  // If count  is greater than or equal end
+					 /** Loop from start coordinates to end coordinates
+                                        * Moving the frame Image 1 pixel to the left and
+                                        * 1 pixel upward
+                                        */       
+
+					int x1_copy = x1, y1_copy = y1;
+					extractFrame(x1,y1,frameWidth, frameHeight); 
+					for(int count = start -1; count >= end ; --count){
+						if( x1_copy < x2){ ++x1_copy; }  // Move Image 1 pixel to right
+						if( x1_copy > x2){ --x1_copy; }  // Move Image 1 pixel to the left
+		              			if( y1_copy < y2){ ++y1_copy; }  // Move Image 1 pixel downward
+						if( y1_copy > y2){ --y1_copy; }  // Move Image 1 pixel upward
+
+						if( x1_copy > x2 || y1_copy > y2){
+							// Invoke the extractFrame function
+							extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+						}
+						if( x1_copy == x2 && y1_copy == y2){
+							// Invoke the extractFrame function
+							extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+							break;
+						}	
+					}
+				}
+				
+			}
+			else{
+				std::cout << "Invalid frame Image size." << "\n";
+			}		
+		}
+		else{
+			std::cout << "Invalid end coordinates." << "\n";
+		}
+	}
+
+	else{
+		std::cout << "Invalid start coordinates." << "\n";
+	}
+
+	delete [] binaryData; // Deallocate the heap memory of the input image after extracting frames
+}
+
+/** Implementation of the formatImages function
+  * that outputs image frames based on given operations
+*/
+
+void MTLKHU004::FrameSequence::formatImages(int frameWidth, int frameHeight, std::vector<std::string> sequences){
+	for(int q = 0; q < sequences.size() ;++q){
+		if( sequences[q] == "none"){ // If operation is none
+			for(int x=0; x<imageSequence.size(); ++x){
+				std::string outFile = sequences[q+1];
+                		if( x < 10){ outFile = outFile + "000"+ std::to_string(x)+".pgm"; }
+                		if( x >= 10 && x<100){ outFile = outFile + "00"+ std::to_string(x) +".pgm"; }
+                		if( x >= 100 && x <1000){ outFile = outFile + "0"+ std::to_string(x)+".pgm"; }
+                		if( x >= 1000){ outFile = outFile + std::to_string(x)+".pgm"; }
+
+                		std::ofstream out(outFile);
+                		out << "P5" << std::endl;
+                		out << frameWidth << " " << frameHeight << std::endl;
+                		out << intensity << std::endl;
+                
+				
+                		for(int i=0; i<frameWidth; ++i){
+                        		for(int j=0; j<frameHeight; ++j){
+                                		out << imageSequence[x][i][j];
+                        		}
+                		}
+			}
+		
+		}
+		if( sequences[q] == "invert"){ // If operation is invert
+			for(int x=0; x<imageSequence.size(); ++x){
+				std::string outFile = sequences[q+1]; // Extract the name
+				
+				if( x < 10){ outFile = outFile + "000" + std::to_string(x) + ".pgm"; }
+				if( x >= 10 && x < 100){ outFile = outFile + "00" + std::to_string(x) + ".pgm"; }
+				if( x >= 100 && x < 1000){ outFile = outFile + "0" + std::to_string(x) + ".pgm"; }
+				if( x >= 1000){ outFile = outFile + std::to_string(x) + ".pgm"; }
+
+				std::ofstream out(outFile);
+				out << "P5" << std::endl;
+				out << frameWidth << " " << frameHeight << std::endl;
+				out << intensity << std::endl;
+
+				for(int i=0; i<frameWidth; ++i){
+					for(int j=0; j<frameHeight; ++j){
+						out << (unsigned char)(255 - (int)imageSequence[x][i][j]);
+					}	
+				}
+			}
+		}
+		if( sequences[q] == "reverse"){ // If operation is reverse
+			 int r = 0;
+			 for(int x=imageSequence.size()-1; x>=0; --x){
+                                std::string outFile = sequences[q+1]; // Extract the name
+
+                                if( r < 10){ outFile = outFile + "000" + std::to_string(r) + ".pgm"; }
+                                if( r >= 10 && r < 100){ outFile = outFile + "00" + std::to_string(r) + ".pgm"; }
+                                if( r >= 100 && r < 1000){ outFile = outFile + "0" + std::to_string(r) + ".pgm"; }
+                                if( r >= 1000){ outFile = outFile + std::to_string(r) + ".pgm"; }
+
+                                std::ofstream out(outFile);
+                                out << "P5" << std::endl;
+                                out << frameWidth << " " << frameHeight << std::endl;
+                                out << intensity << std::endl;
+
+                                for(int i=0; i<frameWidth; ++i){
+                                        for(int j=0; j<frameHeight; ++j){
+                                                out << imageSequence[x][i][j];
+                                        }       
+                                }
+				++r;
+                        }
+
+		}
+		if( sequences[q] == "revinvert"){ // If operation is revinvert
+			int r = 0;
+			for(int x=imageSequence.size()-1; x>=0; --x){ // Reverse the image frames
+                                std::string outFile = sequences[q+1];
+                                if( r < 10){ outFile = outFile + "000"+ std::to_string(r)+".pgm"; }
+                                if( r >= 10 && r<100){ outFile = outFile + "00"+ std::to_string(r) +".pgm"; }
+                                if( r >= 100 && r <1000){ outFile = outFile + "0"+ std::to_string(r)+".pgm"; }
+                                if( r >= 1000){ outFile = outFile + std::to_string(r)+".pgm"; }
+
+                                std::ofstream out(outFile);
+                                out << "P5" << std::endl;
+                                out << frameWidth << " " << frameHeight << std::endl;
+                                out << intensity << std::endl;
+
+				for(int i=0; i<frameWidth; ++i){ 
+                                        for(int j=0; j<frameHeight; ++j){
+						 // Invert pixels 
+                                                 out << (unsigned char)(255 - (int)imageSequence[x][i][j]);
+                                        }       
+                                }
+				++r;
+                        }
+
+		}
+        }
+}
+
+/** Implementation of the mastery function
+  * that extract multiple image frames
+  * by using the extractFrames with varies arguments
+*/
+void MTLKHU004::FrameSequence::mastery( int n,std::vector<int> coordinates, int frameWidth, int frameHeight){
+	frameWidth = frameWidth; frameHeight = frameHeight;
+	int set = 0;
+	
+	for(int i=1; i< n ; ++i){
+		
+                int x1 = coordinates[set];
+                int y1 = coordinates[set+1];
+                int x2 = coordinates[set+2];
+                int y2 = coordinates[set+3];
+                set += 2;
+
+		if( x1 >= 0 && x1 <= width && y1 >= 0 && y1 <= height){ // Check if x1 and y1 are valid coordinates
+			if( x2 >=0 && x2 <= width && y2 >= 0 && y2 <= height){ // Check if x2 and y2 are valid coordinates
+				if( frameWidth > 0 && frameHeight > 0){ // Check if frameSize is valid ( height and width > 0)
+				
+					// Choose the start and end of extraction
+                                	int start, end;
+                                	if( x1 <= y1 && x2 >= y2 ){
+                                        	start = x1; end = x2;
+                                	}
+                                	if( x1 <= y1 && x2 < y2 ){
+                                        	start = x1; end = y2;
+                                	}
+                                	if( y1 <= x1 && x2 >= y2 ){
+                                        	start = y1; end = x2;
+                                	}
+                                	if( y1 <= x1 && x2 < y2 ){
+                                        	start = y1; end = y2;
+                                	}
+                                	if( x1 > y1 && x2 >= y2 ){
+                                        	start = y1; end = x2;
+                                	}
+                                	if( x1 > y1 && x2 < y2 ){
+                                        	start = y1; end = y2;
+                                	}
+                                	if( y1 > x1 && x2 >= y2 ){
+                                        	start = x1; end = x2;
+                                	}
+                                	if( y1 > x1 && x2 < y2 ){
+                                        	start = x1; end = y2;
+                                	}
+					
+
+					if( start <= end){ // If start is less than or equal end 
+                                        	/** Loop from start coordinates to end coordinates
+                                        	* Moving the frame Image 1 pixel to the right and
+                                        	* 1 pixel downward
+                                        	*/
+                                	
+                                        	int x1_copy = x1, y1_copy = y1;
+                                       		extractFrame(x1,y1,frameWidth, frameHeight);    
+                                        	for(int count = start; count < end ; ++count){
+                                                	if( x1_copy < x2){ ++x1_copy; }  // Move Image 1 pixel to right
+                	                                if( x1_copy > x2){ --x1_copy; }  // Move Image 1 pixel to the left
+        	                                        if( y1_copy < y2){ ++y1_copy; }  // Move Image 1 pixel downward
+	                                                if( y1_copy > y2){ --y1_copy; }  // Move Image 1 pixel upward
+
+                                                	if( x1_copy < x2 || y1_copy < y2){
+                                                        // Invoke the extractFrame function
+                                                        extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+                                                	}
+                                                	if( x1_copy == x2 && y1_copy == y2){
+                                                        	// Invoke the extractFrame function
+                                                        	extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+                                                        	break;
+                                                	}
+                                        	}
+                                	}
+					if( start >= end){  // If start is greater than or equal to end
+                                        	/** Loop from start coordinates to end coordinates
+                                        	* Moving the frame Image 1 pixel to the left and
+                                        	* 1 pixel upward
+                                        	*/       
+
+                                        	int x1_copy = x1, y1_copy = y1;
+                                        	extractFrame(x1,y1,frameWidth, frameHeight); 
+                                        	for(int count = start -1; count >= end ; --count){
+							if( x1_copy < x2){ ++x1_copy; }  // Move Image 1 pixel to right
+                        	                        if( x1_copy > x2){ --x1_copy; }  // Move Image 1 pixel to the left
+                	                                if( y1_copy < y2){ ++y1_copy; }  // Move Image 1 pixel downward
+        	                                        if( y1_copy > y2){ --y1_copy; }  // Move Image 1 pixel upward
+								
+
+                                                	if( x1_copy > x2 || y1_copy > y2){
+                                                        	// Invoke the extractFrame function
+                                                        	extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+                                                	}
+                                                	if( x1_copy == x2 && y1_copy == y2){
+                                                        	// Invoke the extractFrame function
+                                                        	extractFrame(x1_copy, y1_copy, frameWidth, frameHeight); 
+                                                        	break;
+                                                	}       
+                                        	}
+                                	}
+				}
+				else{
+					std::cout << "Invalid frame Image size." << "\n";
+				}
+			}
+			else{
+				std::cout << "Invalid end coordinates" << "\n";
+			}
+		}
+		else{
+			std::cout << "Invalid start coordinates." << "\n";
+		}
+	}
+	delete [] binaryData; // Deallocate the heap memory of the input image after extracting frames
+}
+
+/** Implementation of the deceleration/acceleration function
+  * that accelarates from a given pixel to some max pixel
+*/
+void MTLKHU004::FrameSequence::accelerate(int val){
+
+}
